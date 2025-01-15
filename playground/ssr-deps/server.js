@@ -1,12 +1,19 @@
 // @ts-check
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath } from 'node:url'
 import express from 'express'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const isTest = process.env.NODE_ENV === 'test' || !!process.env.VITE_TEST_BUILD
+const isTest = process.env.VITEST
+
+const noExternal = [
+  '@vitejs/test-no-external-cjs',
+  '@vitejs/test-import-builtin-cjs',
+  '@vitejs/test-no-external-css',
+  '@vitejs/test-external-entry',
+]
 
 export async function createServer(root = process.cwd(), hmrPort) {
   const resolve = (p) => path.resolve(__dirname, p)
@@ -27,21 +34,68 @@ export async function createServer(root = process.cwd(), hmrPort) {
         // During tests we edit the files too fast and sometimes chokidar
         // misses change events, so enforce polling for consistency
         usePolling: true,
-        interval: 100
+        interval: 100,
       },
       hmr: {
-        port: hmrPort
-      }
+        port: hmrPort,
+      },
     },
     appType: 'custom',
     ssr: {
-      noExternal: ['no-external-cjs', 'import-builtin-cjs', 'no-external-css']
-    }
+      noExternal: [
+        ...noExternal,
+        '@vitejs/test-nested-exclude',
+        '@vitejs/test-nested-include',
+      ],
+      external: [
+        '@vitejs/test-nested-external',
+        '@vitejs/test-external-entry/entry',
+      ],
+      optimizeDeps: {
+        include: [
+          ...noExternal,
+          '@vitejs/test-nested-exclude > @vitejs/test-nested-include',
+        ],
+      },
+    },
+    plugins: [
+      {
+        name: 'dep-virtual',
+        enforce: 'pre',
+        resolveId(id) {
+          if (id === '@vitejs/test-pkg-exports/virtual') {
+            return '@vitejs/test-pkg-exports/virtual'
+          }
+        },
+        load(id) {
+          if (id === '@vitejs/test-pkg-exports/virtual') {
+            return 'export default "[success]"'
+          }
+        },
+      },
+      {
+        name: 'virtual-isomorphic-module',
+        resolveId(id) {
+          if (id === 'virtual:isomorphic-module') {
+            return '\0virtual:isomorphic-module'
+          }
+        },
+        load(id, { ssr }) {
+          if (id === '\0virtual:isomorphic-module') {
+            if (ssr) {
+              return 'export { default } from "/src/isomorphic-module-server.js";'
+            } else {
+              return 'export { default } from "/src/isomorphic-module-browser.js";'
+            }
+          }
+        },
+      },
+    ],
   })
   // use vite's connect instance as middleware
   app.use(vite.middlewares)
 
-  app.use('*', async (req, res) => {
+  app.use('*all', async (req, res) => {
     try {
       const url = req.originalUrl
 
@@ -69,6 +123,6 @@ if (!isTest) {
   createServer().then(({ app }) =>
     app.listen(5173, () => {
       console.log('http://localhost:5173')
-    })
+    }),
   )
 }

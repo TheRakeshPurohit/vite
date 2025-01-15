@@ -1,3 +1,4 @@
+/* eslint-disable import-x/no-duplicates */
 import ra from './no-ext'
 import rb from './no-ext.js' // no substitution
 import rc from './ext'

@@ -1,39 +1,72 @@
+import type { DepOptimizationConfig } from '../optimizer'
+import { mergeWithDefaults } from '../utils'
+
 export type SSRTarget = 'node' | 'webworker'
-export type SSRFormat = 'esm' | 'cjs'
+
+export type SsrDepOptimizationConfig = DepOptimizationConfig
 
 export interface SSROptions {
-  external?: string[]
   noExternal?: string | RegExp | (string | RegExp)[] | true
+  external?: string[] | true
+
   /**
    * Define the target for the ssr build. The browser field in package.json
    * is ignored for node but used if webworker is the target
-   * Default: 'node'
+   * This option will be removed in a future major version
+   * @default 'node'
    */
   target?: SSRTarget
+
   /**
-   * Define the format for the ssr build. Since Vite v3 the SSR build generates ESM by default.
-   * `'cjs'` can be selected to generate a CJS build, but it isn't recommended. This option is
-   * left marked as experimental to give users more time to update to ESM. CJS builds requires
-   * complex externalization heuristics that aren't present in the ESM format.
+   * Control over which dependencies are optimized during SSR and esbuild options
+   * During build:
+   *   no external CJS dependencies are optimized by default
+   * During dev:
+   *   explicit no external CJS dependencies are optimized by default
    * @experimental
    */
-  format?: SSRFormat
+  optimizeDeps?: SsrDepOptimizationConfig
+
+  resolve?: {
+    /**
+     * Conditions that are used in the plugin pipeline. The default value is the root config's `resolve.conditions`.
+     *
+     * Use this to override the default ssr conditions for the ssr build.
+     *
+     * @default rootConfig.resolve.conditions
+     */
+    conditions?: string[]
+
+    /**
+     * Conditions that are used during ssr import (including `ssrLoadModule`) of externalized dependencies.
+     *
+     * @default []
+     */
+    externalConditions?: string[]
+
+    mainFields?: string[]
+  }
 }
 
 export interface ResolvedSSROptions extends SSROptions {
   target: SSRTarget
-  format: SSRFormat
+  optimizeDeps: SsrDepOptimizationConfig
 }
 
+export const ssrConfigDefaults = Object.freeze({
+  // noExternal
+  // external
+  target: 'node',
+  optimizeDeps: {},
+  // resolve
+} satisfies SSROptions)
+
 export function resolveSSROptions(
-  ssr: SSROptions | undefined
-): ResolvedSSROptions | undefined {
-  if (ssr === undefined) {
-    return undefined
-  }
-  return {
-    format: 'esm',
-    target: 'node',
-    ...ssr
-  }
+  ssr: SSROptions | undefined,
+  preserveSymlinks: boolean,
+): ResolvedSSROptions {
+  const defaults = mergeWithDefaults(ssrConfigDefaults, {
+    optimizeDeps: { esbuildOptions: { preserveSymlinks } },
+  } satisfies SSROptions)
+  return mergeWithDefaults(defaults, ssr ?? {})
 }

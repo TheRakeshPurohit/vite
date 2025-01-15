@@ -1,36 +1,8 @@
-import { args, getPackageInfo, publishPackage, step } from './releaseUtils'
+import { publish } from '@vitejs/release-scripts'
 
-async function main() {
-  const tag = args._[0]
+// Check the tag passed in CI, and skip provenance if tag has `@` due to
+// https://github.com/slsa-framework/slsa-github-generator/pull/2758 not released
+const tag = process.argv.slice(2)[0] ?? ''
+const provenance = !tag.includes('@')
 
-  if (!tag) {
-    throw new Error('No tag specified')
-  }
-
-  let pkgName = 'vite'
-  let version
-
-  if (tag.includes('@')) [pkgName, version] = tag.split('@')
-  else version = tag
-
-  if (version.startsWith('v')) version = version.slice(1)
-
-  const { currentVersion, pkgDir } = getPackageInfo(pkgName)
-  if (currentVersion !== version)
-    throw new Error(
-      `Package version from tag "${version}" mismatches with current version "${currentVersion}"`
-    )
-
-  step('Publishing package...')
-  const releaseTag = version.includes('beta')
-    ? 'beta'
-    : version.includes('alpha')
-    ? 'alpha'
-    : undefined
-  await publishPackage(pkgDir, releaseTag)
-}
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+publish({ defaultPackage: 'vite', provenance, packageManager: 'pnpm' })
